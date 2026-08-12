@@ -1,16 +1,20 @@
 import numpy as np
 
 
+INPUT_COUNT = 10   # 5 original inputs + 5 obstacle ray sensors
+HIDDEN_COUNT = 12  # bumped up since the network now has more to reason about
+OUTPUT_COUNT = 2
+
+
 class NeuralNetwork:
 
     def __init__(self):
-        # 5 inputs -> 6 hidden neurons
-        self.weights_input_hidden = np.random.randn(5, 6) * 0.5
-        self.bias_hidden = np.zeros(6)
 
-        # 6 hidden neurons -> 2 outputs
-        self.weights_hidden_output = np.random.randn(6, 2) * 0.5
-        self.bias_output = np.zeros(2)
+        self.weights_input_hidden = np.random.randn(INPUT_COUNT, HIDDEN_COUNT) * 0.5
+        self.bias_hidden = np.zeros(HIDDEN_COUNT)
+
+        self.weights_hidden_output = np.random.randn(HIDDEN_COUNT, OUTPUT_COUNT) * 0.5
+        self.bias_output = np.zeros(OUTPUT_COUNT)
 
     def activate(self, x):
         return np.tanh(x)

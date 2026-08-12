@@ -6,6 +6,15 @@ import numpy as np
 from neural_network import NeuralNetwork
 
 
+# ============================================================
+# Sensor settings
+# ============================================================
+
+RAY_COUNT = 5
+RAY_SPREAD = math.pi * 0.8   # total angle covered by the ray fan
+RAY_MAX_DISTANCE = 250
+
+
 class Bot:
 
     def __init__(self, width, height, radius):
@@ -15,6 +24,8 @@ class Bot:
         self.radius = radius
 
         self.brain = NeuralNetwork()
+
+        self.hit_obstacle = False
 
         self.reset()
 
@@ -35,18 +46,97 @@ class Bot:
 
         self.alive = True
         self.reached_goal = False
+        self.hit_obstacle = False
 
         self.start_distance = 0
         self.distance_to_goal = 0
 
-        # Information used later by the brain visualizer
-        self.inputs = np.zeros(5)
+        # 5 original inputs + RAY_COUNT obstacle sensors
+        self.inputs = np.zeros(5 + RAY_COUNT)
         self.outputs = np.zeros(2)
 
-    def update(self, goal):
+        self.ray_hits = [(self.x, self.y)] * RAY_COUNT
+
+    def sense_obstacles(self, obstacles):
+        """
+        Casts a fan of rays from the bot and returns, for each ray,
+        the normalized distance (0 = touching something, 1 = nothing
+        within range) to the closest obstacle or wall.
+        """
+
+        readings = []
+        hit_points = []
+
+        start_angle = self.angle - RAY_SPREAD / 2
+
+        for i in range(RAY_COUNT):
+
+            ray_angle = (
+                start_angle +
+                (RAY_SPREAD / (RAY_COUNT - 1)) * i
+            )
+
+            closest_distance = RAY_MAX_DISTANCE
+
+            # ------------------------------------------------
+            # Check obstacles
+            # ------------------------------------------------
+
+            for obstacle in obstacles:
+
+                hit_distance = obstacle.ray_intersection_distance(
+                    self.x,
+                    self.y,
+                    ray_angle,
+                    RAY_MAX_DISTANCE
+                )
+
+                if hit_distance is not None and hit_distance < closest_distance:
+
+                    closest_distance = hit_distance
+
+            # ------------------------------------------------
+            # Check screen boundaries (treat as walls too)
+            # ------------------------------------------------
+
+            dir_x = math.cos(ray_angle)
+            dir_y = math.sin(ray_angle)
+
+            for step in range(0, int(RAY_MAX_DISTANCE), 4):
+
+                check_x = self.x + dir_x * step
+                check_y = self.y + dir_y * step
+
+                if (
+                    check_x < 0 or check_x > self.width or
+                    check_y < 0 or check_y > self.height
+                ):
+
+                    if step < closest_distance:
+                        closest_distance = step
+
+                    break
+
+            hit_points.append(
+                (
+                    self.x + dir_x * closest_distance,
+                    self.y + dir_y * closest_distance
+                )
+            )
+
+            readings.append(closest_distance / RAY_MAX_DISTANCE)
+
+        self.ray_hits = hit_points
+
+        return readings
+
+    def update(self, goal, obstacles=None):
 
         if not self.alive:
             return
+
+        if obstacles is None:
+            obstacles = []
 
         # ----------------------------------------------------
         # Distance to goal
@@ -106,10 +196,16 @@ class Bot:
         )
 
         # ----------------------------------------------------
+        # Obstacle sensors
+        # ----------------------------------------------------
+
+        ray_readings = self.sense_obstacles(obstacles)
+
+        # ----------------------------------------------------
         # Neural network inputs
         # ----------------------------------------------------
 
-        self.inputs = np.array([
+        base_inputs = [
             distance / math.sqrt(
                 self.width ** 2 +
                 self.height ** 2
@@ -122,7 +218,11 @@ class Bot:
             right_distance,
 
             current_direction
-        ])
+        ]
+
+        self.inputs = np.array(
+            base_inputs + ray_readings
+        )
 
         # ----------------------------------------------------
         # Ask the brain
@@ -181,6 +281,19 @@ class Bot:
             self.angle = -self.angle
 
         # ----------------------------------------------------
+        # Check obstacle collision
+        # ----------------------------------------------------
+
+        for obstacle in obstacles:
+
+            if obstacle.collides_with_point(self.x, self.y, self.radius):
+
+                self.alive = False
+                self.hit_obstacle = True
+
+                break
+
+        # ----------------------------------------------------
         # Check goal
         # ----------------------------------------------------
 
@@ -225,9 +338,33 @@ class Bot:
         if self.reached_goal:
             fitness += 10
 
+        # Small penalty for dying into an obstacle, so bots that
+        # got close but crashed still beat bots that barely moved,
+        # but are discouraged from reckless routes.
+        if self.hit_obstacle:
+            fitness -= 1
+
         return fitness
 
-    def draw(self, screen, color):
+    def draw(self, screen, color, show_rays=False):
+
+        if show_rays:
+
+            for hit_x, hit_y in self.ray_hits:
+
+                pygame.draw.line(
+                    screen,
+                    (90, 90, 110),
+                    (
+                        self.x,
+                        self.y
+                    ),
+                    (
+                        hit_x,
+                        hit_y
+                    ),
+                    1
+                )
 
         pygame.draw.circle(
             screen,

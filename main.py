@@ -2,6 +2,7 @@ import pygame
 
 from bot import Bot
 from evolution import Evolution
+from obstacle import build_default_course
 
 
 # ============================================================
@@ -111,12 +112,19 @@ evolution = Evolution(
 
 goal = Goal()
 
+obstacles = build_default_course(
+    WIDTH,
+    HEIGHT
+)
+
 
 # ============================================================
 # Generation timer
 # ============================================================
 
 generation_timer = 0
+
+show_rays = False
 
 
 # ============================================================
@@ -137,6 +145,12 @@ while running:
 
             running = False
 
+        if event.type == pygame.KEYDOWN:
+
+            if event.key == pygame.K_t:
+
+                show_rays = not show_rays
+
     # --------------------------------------------------------
     # Update bots
     # --------------------------------------------------------
@@ -144,7 +158,8 @@ while running:
     for bot in bots:
 
         bot.update(
-            goal
+            goal,
+            obstacles
         )
 
     # --------------------------------------------------------
@@ -171,6 +186,12 @@ while running:
         BACKGROUND
     )
 
+    for obstacle in obstacles:
+
+        obstacle.draw(
+            screen
+        )
+
     goal.draw(
         screen
     )
@@ -188,7 +209,8 @@ while running:
 
             bot.draw(
                 screen,
-                BEST_BOT_COLOR
+                BEST_BOT_COLOR,
+                show_rays=show_rays
             )
 
         else:
@@ -226,6 +248,12 @@ while running:
         (230, 230, 230)
     )
 
+    rays_text = font.render(
+        "Rays (best bot): ON [T]" if show_rays else "Rays (best bot): OFF [T]",
+        True,
+        (150, 150, 160)
+    )
+
     screen.blit(
         generation_text,
         (20, 20)
@@ -244,6 +272,11 @@ while running:
     screen.blit(
         time_text,
         (20, 95)
+    )
+
+    screen.blit(
+        rays_text,
+        (20, 120)
     )
 
     # --------------------------------------------------------
