@@ -125,7 +125,7 @@ Handles the evolutionary process, including fitness evaluation, selection, repro
 Clone the repository:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/neural-bots.git
+git clone https://github.com/gmxjnr/neural-bots.git
 cd neural-bots
 ```
 
