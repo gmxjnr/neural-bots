@@ -2,7 +2,8 @@ import pygame
 
 from bot import Bot
 from evolution import Evolution
-from obstacle import build_default_course
+from obstacle import get_course
+from viz_server import start_server, viz_state
 
 
 # ============================================================
@@ -18,6 +19,12 @@ BOT_COUNT = 50
 BOT_RADIUS = 7
 
 GENERATION_TIME = 10
+
+# How many generations a population spends on one obstacle layout
+# before rotating to the next. Brains are never reset when this
+# happens, only the environment changes, so bots are pushed to
+# generalize instead of memorizing one specific gap pattern.
+COURSE_ROTATION_INTERVAL = 10
 
 BACKGROUND = (15, 17, 24)
 
@@ -92,6 +99,11 @@ font = pygame.font.SysFont(
     20
 )
 
+id_font = pygame.font.SysFont(
+    "Arial",
+    12
+)
+
 
 # ============================================================
 # Create bots
@@ -101,9 +113,10 @@ bots = [
     Bot(
         WIDTH,
         HEIGHT,
-        BOT_RADIUS
+        BOT_RADIUS,
+        bot_id=i
     )
-    for _ in range(BOT_COUNT)
+    for i in range(BOT_COUNT)
 ]
 
 evolution = Evolution(
@@ -112,10 +125,28 @@ evolution = Evolution(
 
 goal = Goal()
 
-obstacles = build_default_course(
+course_index = 0
+
+obstacles, course_name = get_course(
+    course_index,
     WIDTH,
     HEIGHT
 )
+
+
+# ============================================================
+# Brain viewer server
+# ============================================================
+#
+# Runs in a background thread. The PHP page (run separately with
+# e.g. `php -S localhost:8000` inside viz_php/) polls this over
+# HTTP to show what a selected bot is "thinking".
+
+start_server(port=8765)
+
+viz_state.set_bots(bots)
+viz_state.set_evolution(evolution)
+viz_state.set_world(WIDTH, HEIGHT, goal, obstacles, BOT_RADIUS)
 
 
 # ============================================================
@@ -178,6 +209,25 @@ while running:
 
         generation_timer = 0
 
+        # Rotate the obstacle course every N generations. Bots keep
+        # their brains (mutation/reset already happened inside
+        # evolve()), only the environment around them changes.
+        if evolution.generation % COURSE_ROTATION_INTERVAL == 0:
+
+            course_index += 1
+
+            obstacles, course_name = get_course(
+                course_index,
+                WIDTH,
+                HEIGHT
+            )
+
+            viz_state.set_world(WIDTH, HEIGHT, goal, obstacles, BOT_RADIUS)
+
+    # New generation may be a new list (even if same Bot objects),
+    # so keep the viz server pointed at the current one every frame.
+    viz_state.set_bots(bots)
+
     # --------------------------------------------------------
     # Draw
     # --------------------------------------------------------
@@ -210,14 +260,16 @@ while running:
             bot.draw(
                 screen,
                 BEST_BOT_COLOR,
-                show_rays=show_rays
+                show_rays=show_rays,
+                id_font=id_font
             )
 
         else:
 
             bot.draw(
                 screen,
-                BOT_COLOR
+                BOT_COLOR,
+                id_font=id_font
             )
 
     # --------------------------------------------------------
@@ -254,6 +306,17 @@ while running:
         (150, 150, 160)
     )
 
+    generations_until_rotation = (
+        COURSE_ROTATION_INTERVAL -
+        (evolution.generation % COURSE_ROTATION_INTERVAL)
+    )
+
+    course_text = font.render(
+        f"Course: {course_name} (next in {generations_until_rotation} gen)",
+        True,
+        (150, 150, 160)
+    )
+
     screen.blit(
         generation_text,
         (20, 20)
@@ -277,6 +340,11 @@ while running:
     screen.blit(
         rays_text,
         (20, 120)
+    )
+
+    screen.blit(
+        course_text,
+        (20, 145)
     )
 
     # --------------------------------------------------------

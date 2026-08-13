@@ -17,11 +17,16 @@ RAY_MAX_DISTANCE = 250
 
 class Bot:
 
-    def __init__(self, width, height, radius):
+    def __init__(self, width, height, radius, bot_id=0):
 
         self.width = width
         self.height = height
         self.radius = radius
+
+        # Stable identity, used by the brain viewer to look this bot
+        # up over HTTP. Stays the same across generations since
+        # Evolution reuses the same Bot instances (just resets them).
+        self.id = bot_id
 
         self.brain = NeuralNetwork()
 
@@ -51,10 +56,20 @@ class Bot:
         self.start_distance = 0
         self.distance_to_goal = 0
 
+        # Used by the refined fitness function: how long this bot
+        # has been alive, and how much clearance it kept from
+        # obstacles on average (0 = constantly grazing walls,
+        # 1 = always far away).
+        self.time_alive = 0
+        self._clearance_sum = 0
+
         # 5 original inputs + RAY_COUNT obstacle sensors
         self.inputs = np.zeros(5 + RAY_COUNT)
         self.outputs = np.zeros(2)
 
+        # Default rays: all pointing straight from the bot's own
+        # position (zero length), so draw() always has valid
+        # (x, y) tuples to unpack, even before the first update().
         self.ray_hits = [(self.x, self.y)] * RAY_COUNT
 
     def sense_obstacles(self, obstacles):
@@ -201,6 +216,11 @@ class Bot:
 
         ray_readings = self.sense_obstacles(obstacles)
 
+        # Track how much breathing room this bot kept from obstacles
+        # over its lifetime, used by the fitness function below.
+        self.time_alive += 1
+        self._clearance_sum += min(ray_readings)
+
         # ----------------------------------------------------
         # Neural network inputs
         # ----------------------------------------------------
@@ -329,24 +349,60 @@ class Bot:
             (1 + self.distance_to_goal / 100)
         )
 
-        fitness = (
-            progress_score +
-            closeness_score
+        # Average obstacle clearance over the bot's lifetime, scaled
+        # down so it nudges behavior without overpowering progress.
+        # A bot that constantly hugs walls scores lower than one that
+        # keeps some breathing room, even if both reach the goal.
+        average_clearance = (
+            self._clearance_sum / self.time_alive
+            if self.time_alive > 0 else 0
         )
 
-        # Huge reward for actually reaching the goal
+        clearance_score = average_clearance * 0.5
+
+        fitness = (
+            progress_score +
+            closeness_score +
+            clearance_score
+        )
+
+        # Huge reward for actually reaching the goal, plus a speed
+        # bonus: reaching it in under ~5 seconds (300 frames @ 60fps)
+        # earns extra credit, tapering to 0 for slow runs. This
+        # separates "found a fast route" from "wandered into it".
         if self.reached_goal:
+
             fitness += 10
 
-        # Small penalty for dying into an obstacle, so bots that
-        # got close but crashed still beat bots that barely moved,
-        # but are discouraged from reckless routes.
+            speed_bonus = max(0, 300 - self.time_alive) / 100
+            fitness += speed_bonus
+
+        # Bigger penalty for hitting an obstacle. This used to be -1,
+        # which the +10 goal bonus made almost irrelevant. At -3 it's
+        # a real deterrent without completely wiping out a bot that
+        # otherwise made good progress.
         if self.hit_obstacle:
-            fitness -= 1
+            fitness -= 3
 
         return fitness
 
-    def draw(self, screen, color, show_rays=False):
+    def draw(self, screen, color, show_rays=False, id_font=None):
+
+        if id_font is not None:
+
+            id_surface = id_font.render(
+                str(self.id),
+                True,
+                (200, 200, 210)
+            )
+
+            screen.blit(
+                id_surface,
+                (
+                    self.x - id_surface.get_width() / 2,
+                    self.y - self.radius - 16
+                )
+            )
 
         if show_rays:
 

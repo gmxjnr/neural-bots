@@ -12,6 +12,9 @@ class Evolution:
         self.best_fitness = 0
         self.average_fitness = 0
 
+        # Kept for the brain viewer's population-over-time chart.
+        self.history = []
+
     def evolve(self):
 
         # ----------------------------------------------------
@@ -48,6 +51,14 @@ class Evolution:
                 for score, bot in fitness_scores
             )
             / len(fitness_scores)
+        )
+
+        self.history.append(
+            {
+                "generation": self.generation,
+                "best": round(self.best_fitness, 3),
+                "average": round(self.average_fitness, 3)
+            }
         )
 
         # ----------------------------------------------------

@@ -53,10 +53,6 @@ class Obstacle:
         Casts a ray from (origin_x, origin_y) at the given angle.
         Returns the distance to this obstacle's edge, or None if it
         doesn't hit within max_distance.
-
-        Uses simple step-based marching (fast enough for small maps
-        and small ray counts, and much easier to reason about than
-        a full slab/AABB intersection test).
         """
 
         step_size = 4
@@ -80,13 +76,38 @@ class Obstacle:
         return None
 
 
-def build_default_course(width, height):
+# ============================================================
+# Course library
+# ============================================================
+#
+# Each function builds one obstacle layout. Bots keep their brains
+# (weights persist across generations) but get moved between these
+# layouts periodically, so they're pushed to learn general obstacle-
+# avoidance rather than memorizing one specific gap pattern.
+
+def build_course_open(width, height):
     """
-    A simple obstacle course: a few wall segments the bots
-    need to navigate around to reach the goal on the right.
+    Almost no obstacles. Used as the "warm-up" course so a fresh
+    population can first learn to reach the goal at all.
     """
 
-    obstacles = [
+    return [
+
+        Obstacle(
+            width * 0.5 - 20, height * 0.75,
+            40, height * 0.25
+        ),
+
+    ]
+
+
+def build_course_zigzag(width, height):
+    """
+    The original course: alternating walls from top and bottom,
+    forcing an S-shaped path.
+    """
+
+    return [
 
         Obstacle(
             300, 0,
@@ -105,4 +126,108 @@ def build_default_course(width, height):
 
     ]
 
-    return obstacles
+
+def build_course_gauntlet(width, height):
+    """
+    Narrower gaps and more walls than the zigzag. Meant to be
+    attempted after bots already handle zigzag reasonably well.
+    """
+
+    return [
+
+        Obstacle(
+            250, 0,
+            35, height * 0.55
+        ),
+
+        Obstacle(
+            250, height * 0.75,
+            35, height * 0.25
+        ),
+
+        Obstacle(
+            550, height * 0.2,
+            35, height * 0.6
+        ),
+
+        Obstacle(
+            850, 0,
+            35, height * 0.45
+        ),
+
+        Obstacle(
+            850, height * 0.65,
+            35, height * 0.35
+        ),
+
+    ]
+
+
+def build_course_funnel(width, height):
+    """
+    A pinch-point in the middle of the map: obstacles from both top
+    and bottom leave only a narrow central gap, then open back up.
+    """
+
+    return [
+
+        Obstacle(
+            width * 0.45, 0,
+            40, height * 0.42
+        ),
+
+        Obstacle(
+            width * 0.45, height * 0.58,
+            40, height * 0.42
+        ),
+
+        Obstacle(
+            width * 0.75, height * 0.15,
+            35, height * 0.3
+        ),
+
+        Obstacle(
+            width * 0.75, height * 0.65,
+            35, height * 0.3
+        ),
+
+    ]
+
+
+COURSES = [
+    build_course_open,
+    build_course_zigzag,
+    build_course_gauntlet,
+    build_course_funnel,
+]
+
+COURSE_NAMES = [
+    "Open",
+    "Zigzag",
+    "Gauntlet",
+    "Funnel",
+]
+
+
+def get_course(index, width, height):
+    """
+    Returns (obstacles, name) for the course at this index, wrapping
+    around the course list so it can be called with an ever-
+    increasing counter.
+    """
+
+    course_index = index % len(COURSES)
+
+    obstacles = COURSES[course_index](width, height)
+    name = COURSE_NAMES[course_index]
+
+    return obstacles, name
+
+
+def build_default_course(width, height):
+    """
+    Kept for backwards compatibility with anything still importing
+    this directly; equivalent to the original zigzag layout.
+    """
+
+    return build_course_zigzag(width, height)

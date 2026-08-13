@@ -16,6 +16,13 @@ class NeuralNetwork:
         self.weights_hidden_output = np.random.randn(HIDDEN_COUNT, OUTPUT_COUNT) * 0.5
         self.bias_output = np.zeros(OUTPUT_COUNT)
 
+        # Snapshot of the most recent forward pass, kept around purely
+        # so external tools (like the brain viewer) can inspect what
+        # this network is "thinking" without re-running it.
+        self.last_inputs = None
+        self.last_hidden = None
+        self.last_outputs = None
+
     def activate(self, x):
         return np.tanh(x)
 
@@ -30,6 +37,10 @@ class NeuralNetwork:
         output = np.dot(hidden, self.weights_hidden_output)
         output += self.bias_output
         output = self.activate(output)
+
+        self.last_inputs = inputs
+        self.last_hidden = hidden
+        self.last_outputs = output
 
         return output
 
