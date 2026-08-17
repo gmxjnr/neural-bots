@@ -169,7 +169,7 @@ The current implementation is primarily an experimental learning project. More a
 
 Planned improvements include:
 
-* [ ] More complex environments
+* [x] More complex environments
 * [ ] Improved fitness functions
 * [ ] Better visualization of generations
 * [ ] Configurable neural-network architectures
